@@ -3,53 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GTN Code Formatter Pro</title>
-    <!-- Tailwind CSS CDN -->
+    <title>GTN Formatter Pro V3</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React & ReactDOM CDN -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <!-- Babel for JSX -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; }
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #020617; }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+        .toast-enter { transform: translateY(100%); opacity: 0; }
+        .toast-active { transform: translateY(0); opacity: 1; transition: all 0.3s ease; }
     </style>
 </head>
-<body class="bg-slate-900 text-slate-100">
+<body class="text-slate-200">
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useCallback } = React;
+        const { useState, useEffect, useRef } = React;
 
-        // Custom Icon Component to handle Lucide
-        const Icon = ({ name, size = 24, className = "" }) => {
-            const [svg, setSvg] = useState("");
-            
-            useEffect(() => {
-                if (window.lucide) {
-                    const iconSvg = window.lucide.createIcons();
-                }
-            }, []);
-
+        // Komponen Ikon Lucide
+        const Icon = ({ name, size = 18, className = "" }) => {
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
             return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
         };
 
         const App = () => {
             const [files, setFiles] = useState([]);
-            const [isProcessing, setIsProcessing] = useState(false);
             const [stats, setStats] = useState({ total: 0, formatted: 0 });
+            const [manualText, setManualText] = useState("");
+            const [manualType, setManualType] = useState("js");
+            const [showManual, setShowManual] = useState(false);
+            const [toast, setToast] = useState({ show: false, message: "" });
+            const [isProcessing, setIsProcessing] = useState(false);
+            const textareaRef = useRef(null);
 
-            useEffect(() => {
-                // Initialize lucide icons after render
-                if (window.lucide) window.lucide.createIcons();
-            }, [files, stats]);
+            // Fungsi Notifikasi
+            const showMessage = (msg) => {
+                setToast({ show: true, message: msg });
+                setTimeout(() => setToast({ show: false, message: "" }), 3000);
+            };
 
             const loadScript = (url) => {
                 return new Promise((resolve) => {
@@ -69,231 +65,259 @@
                 }
             };
 
-            const handleFolderUpload = async (event) => {
-                const uploadedFiles = Array.from(event.target.files);
-                const validExtensions = ['.js', '.json', '.html', '.css', '.txt'];
+            const handleFiles = async (uploaded) => {
+                const validExts = ['.js', '.json', '.html', '.css', '.txt'];
+                const filtered = Array.from(uploaded).filter(f => validExts.some(ext => f.name.toLowerCase().endsWith(ext)));
                 
-                const fileData = await Promise.all(
-                    uploadedFiles
-                        .filter(file => validExtensions.some(ext => file.name.endsWith(ext)))
-                        .map(async (file) => {
-                            const content = await file.text();
-                            return {
-                                name: file.name,
-                                path: file.webkitRelativePath || file.name,
-                                originalContent: content,
-                                formattedContent: null,
-                                status: 'pending',
-                                size: file.size,
-                                type: file.name.split('.').pop()
-                            };
-                        })
-                );
+                const newData = await Promise.all(filtered.map(async f => ({
+                    name: f.name,
+                    path: f.webkitRelativePath || f.name,
+                    content: await f.text(),
+                    formatted: null,
+                    status: 'pending',
+                    size: f.size,
+                    type: f.name.split('.').pop()
+                })));
 
-                setFiles(fileData);
-                setStats({ total: fileData.length, formatted: 0 });
+                setFiles(prev => [...prev, ...newData]);
+                setStats(prev => ({ ...prev, total: prev.total + newData.length }));
+                showMessage(`${newData.length} file berhasil ditambahkan`);
             };
 
-            const formatAllFiles = async () => {
+            const runFormat = async () => {
+                if (files.length === 0) return;
                 await initLibraries();
                 setIsProcessing(true);
-                
-                const options = {
-                    indent_size: 2,
-                    indent_char: " ",
-                    max_preserve_newlines: 2,
-                    preserve_newlines: true,
-                    keep_array_indentation: false,
-                    break_chained_methods: false,
-                    indent_scripts: "normal",
-                    brace_style: "collapse",
-                    space_before_conditional: true,
-                    unescape_strings: false,
-                    jslint_happy: false,
-                    end_with_newline: true,
-                    wrap_line_length: 0,
-                    indent_inner_html: false,
-                    comma_first: false,
-                    e4x: false,
-                    indent_empty_lines: false
-                };
+                const options = { indent_size: 2, space_before_conditional: true, end_with_newline: true };
 
-                const updatedFiles = files.map(file => {
+                const updated = files.map(f => {
                     try {
-                        let formatted = file.originalContent;
-                        if (file.type === 'js' || file.type === 'json') {
-                            formatted = window.js_beautify(file.originalContent, options);
-                        } else if (file.type === 'html') {
-                            formatted = window.html_beautify(file.originalContent, options);
-                        } else if (file.type === 'css') {
-                            formatted = window.css_beautify(file.originalContent, options);
-                        }
-
-                        return {
-                            ...file,
-                            formattedContent: formatted,
-                            status: 'success'
-                        };
-                    } catch (err) {
-                        return { ...file, status: 'error' };
+                        let res = f.content;
+                        if (f.type === 'js' || f.type === 'json') res = window.js_beautify(f.content, options);
+                        else if (f.type === 'html') res = window.html_beautify(f.content, options);
+                        else if (f.type === 'css') res = window.css_beautify(f.content, options);
+                        return { ...f, formatted: res, status: 'success' };
+                    } catch (e) {
+                        return { ...f, status: 'error' };
                     }
                 });
 
-                setFiles(updatedFiles);
-                setStats(prev => ({ ...prev, formatted: updatedFiles.filter(f => f.status === 'success').length }));
+                setFiles(updated);
+                setStats(prev => ({ ...prev, formatted: updated.filter(x => x.status === 'success').length }));
                 setIsProcessing(false);
+                showMessage("Format massal selesai!");
             };
 
-            const downloadAsZip = async () => {
-                if (!window.JSZip) await initLibraries();
+            const handleManualFormat = async () => {
+                if (!manualText.trim()) return;
+                await initLibraries();
+                try {
+                    const options = { indent_size: 2, space_before_conditional: true, end_with_newline: true };
+                    let res = manualText;
+                    if (manualType === 'js') res = window.js_beautify(manualText, options);
+                    else if (manualType === 'html') res = window.html_beautify(manualText, options);
+                    else if (manualType === 'css') res = window.css_beautify(manualText, options);
+                    
+                    setManualText(res);
+                    showMessage("Teks manual berhasil dirapikan!");
+                } catch (e) {
+                    showMessage("Error: Gagal memformat teks.");
+                }
+            };
+
+            const copyToClipboard = () => {
+                if (!manualText.trim()) return;
+                textareaRef.current.select();
+                document.execCommand('copy');
+                showMessage("Kode berhasil disalin ke clipboard!");
+            };
+
+            const downloadZip = async () => {
+                await initLibraries();
                 const zip = new window.JSZip();
-                
-                files.forEach(file => {
-                    const content = file.formattedContent || file.originalContent;
-                    zip.file(file.path, content);
-                });
-
-                const content = await zip.generateAsync({ type: "blob" });
-                const url = URL.createObjectURL(content);
+                files.forEach(f => zip.file(f.path, f.formatted || f.content));
+                const blob = await zip.generateAsync({ type: "blob" });
                 const link = document.createElement('a');
-                link.href = url;
-                link.download = `GTN_Formatted_${new Date().getTime()}.zip`;
+                link.href = URL.createObjectURL(blob);
+                link.download = `GTN_Formatted_${Date.now()}.zip`;
                 link.click();
-            };
-
-            const clearFiles = () => {
-                setFiles([]);
-                setStats({ total: 0, formatted: 0 });
+                showMessage("File ZIP sedang diunduh...");
             };
 
             return (
-                <div className="min-h-screen p-4 md:p-8">
-                    <div className="max-w-5xl mx-auto">
-                        <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-                            <div>
-                                <h1 className="text-3xl font-extrabold bg-gradient-to-r from-blue-400 to-indigo-500 bg-clip-text text-transparent flex items-center gap-3">
-                                    <Icon name="zap" className="text-blue-400 fill-blue-400/20" />
-                                    GTN Formatter Pro
-                                </h1>
-                                <p className="text-slate-400 mt-1">Merapikan format script massal dalam sekejap.</p>
-                            </div>
-                            
-                            <div className="flex items-center gap-3">
-                                <button onClick={clearFiles} className="p-2 hover:bg-slate-800 rounded-lg text-slate-400 transition-colors">
-                                    <Icon name="trash-2" size={20} />
-                                </button>
-                                <div className="h-8 w-px bg-slate-700" />
-                                <div className="bg-slate-800 px-4 py-2 rounded-xl border border-slate-700 flex items-center gap-4">
-                                    <div className="text-center">
-                                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Total</p>
-                                        <p className="text-lg font-mono font-bold">{stats.total}</p>
-                                    </div>
-                                    <div className="text-center border-l border-slate-700 pl-4">
-                                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-wider">Rapi</p>
-                                        <p className="text-lg font-mono font-bold text-emerald-400">{stats.formatted}</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </header>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                            <label className="relative group cursor-pointer">
-                                <input type="file" webkitdirectory="true" directory="true" multiple onChange={handleFolderUpload} className="hidden" />
-                                <div className="h-32 border-2 border-dashed border-slate-700 group-hover:border-blue-500 group-hover:bg-blue-500/5 rounded-2xl flex flex-col items-center justify-center transition-all">
-                                    <Icon name="folder-open" className="text-slate-500 group-hover:text-blue-400 mb-2" size={32} />
-                                    <span className="font-semibold text-slate-300">Pilih Folder</span>
-                                    <span className="text-[10px] text-slate-500">Unggah seluruh direktori script</span>
-                                </div>
-                            </label>
-
-                            <button 
-                                disabled={files.length === 0 || isProcessing}
-                                onClick={formatAllFiles}
-                                className="h-32 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:opacity-50 rounded-2xl flex flex-col items-center justify-center transition-all shadow-xl shadow-blue-900/20"
-                            >
-                                <Icon name="zap" className={`${isProcessing ? 'animate-pulse' : ''} mb-2 text-white`} size={32} />
-                                <span className="font-bold text-white text-lg">Format Sekarang</span>
-                                <span className="text-xs text-blue-100/70">Otomatis luruskan baris</span>
-                            </button>
-
-                            <button 
-                                disabled={stats.formatted === 0}
-                                onClick={downloadAsZip}
-                                className="h-32 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:opacity-50 rounded-2xl flex flex-col items-center justify-center transition-all shadow-xl shadow-indigo-900/20"
-                            >
-                                <Icon name="download" className="mb-2 text-white" size={32} />
-                                <span className="font-bold text-white text-lg">Download ZIP</span>
-                                <span className="text-xs text-indigo-100/70">Unduh hasil yang sudah rapi</span>
-                            </button>
-                        </div>
-
-                        <div className="bg-slate-800/40 rounded-2xl border border-slate-700 overflow-hidden backdrop-blur-sm">
-                            <div className="p-4 border-b border-slate-700 bg-slate-800/60 flex justify-between items-center">
-                                <h2 className="font-bold flex items-center gap-2">
-                                    <Icon name="file-code" size={18} className="text-blue-400" />
-                                    Daftar File
-                                </h2>
-                                <span className="text-[10px] text-slate-500 font-mono font-bold">JS • HTML • CSS • JSON Support</span>
-                            </div>
-                            
-                            <div className="max-h-[450px] overflow-y-auto">
-                                {files.length === 0 ? (
-                                    <div className="p-20 text-center flex flex-col items-center opacity-20">
-                                        <Icon name="box" size={64} className="mb-4" />
-                                        <p className="text-lg font-bold">Belum ada file</p>
-                                        <p className="text-sm">Pilih folder untuk memulai proses</p>
-                                    </div>
-                                ) : (
-                                    <table className="w-full text-left border-collapse">
-                                        <thead className="sticky top-0 bg-slate-800 text-slate-500 text-[10px] uppercase font-black tracking-widest border-b border-slate-700">
-                                            <tr>
-                                                <th className="p-4">Path File</th>
-                                                <th className="p-4">Ukuran</th>
-                                                <th className="p-4">Tipe</th>
-                                                <th className="p-4 text-right">Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-700/50">
-                                            {files.map((file, idx) => (
-                                                <tr key={idx} className="hover:bg-slate-700/20 transition-colors">
-                                                    <td className="p-4">
-                                                        <div className="flex flex-col">
-                                                            <span className="font-semibold text-slate-200 text-sm">{file.name}</span>
-                                                            <span className="text-[10px] text-slate-500 font-mono truncate max-w-xs">{file.path}</span>
-                                                        </div>
-                                                    </td>
-                                                    <td className="p-4 text-xs text-slate-400 font-mono">
-                                                        {(file.size / 1024).toFixed(1)} KB
-                                                    </td>
-                                                    <td className="p-4">
-                                                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border ${
-                                                            file.type === 'js' ? 'bg-yellow-500/5 text-yellow-500 border-yellow-500/20' :
-                                                            file.type === 'html' ? 'bg-orange-500/5 text-orange-500 border-orange-500/20' :
-                                                            file.type === 'css' ? 'bg-blue-500/5 text-blue-500 border-blue-500/20' :
-                                                            'bg-slate-500/5 text-slate-400 border-slate-500/20'
-                                                        }`}>
-                                                            {file.type}
-                                                        </span>
-                                                    </td>
-                                                    <td className="p-4 text-right">
-                                                        {file.status === 'pending' && <span className="text-slate-500 text-xs">Menunggu</span>}
-                                                        {file.status === 'success' && <span className="text-emerald-400 text-xs font-bold flex items-center justify-end gap-1"><Icon name="check-circle-2" size={14} /> Berhasil</span>}
-                                                        {file.status === 'error' && <span className="text-red-400 text-xs font-bold flex items-center justify-end gap-1"><Icon name="alert-circle" size={14} /> Gagal</span>}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                )}
-                            </div>
-                        </div>
-
-                        <footer className="mt-12 text-center border-t border-slate-800 pt-8 opacity-60">
-                            <p className="text-[10px] font-black tracking-[0.2em] text-slate-500 uppercase">
-                                Powered by GTN Engine &copy; 2024
-                            </p>
-                        </footer>
+                <div className="min-h-screen p-4 md:p-10 max-w-6xl mx-auto overflow-x-hidden">
+                    {/* Header Notifikasi */}
+                    <div className={`fixed bottom-6 right-6 z-50 bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 transition-all duration-300 ${toast.show ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'}`}>
+                        <Icon name="info" />
+                        <span className="font-bold text-sm">{toast.message}</span>
                     </div>
+
+                    <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-10">
+                        <div className="space-y-1">
+                            <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-600 bg-clip-text text-transparent flex items-center gap-3">
+                                <Icon name="cpu" size={36} className="text-cyan-400" />
+                                GTN Formatter
+                            </h1>
+                            <p className="text-slate-500 font-medium">Auto-align script untuk File, Folder, atau Teks Manual.</p>
+                        </div>
+                        
+                        <div className="flex flex-wrap items-center gap-2 bg-slate-900/80 p-2 rounded-2xl border border-slate-800 w-full lg:w-auto">
+                            <div className="flex-1 lg:flex-none px-4 py-2 bg-slate-950 rounded-xl border border-slate-800 min-w-[80px]">
+                                <p className="text-[10px] text-slate-500 uppercase font-black">Total</p>
+                                <p className="text-xl font-mono font-bold text-white">{stats.total}</p>
+                            </div>
+                            <div className="flex-1 lg:flex-none px-4 py-2 bg-slate-950 rounded-xl border border-slate-800 min-w-[80px]">
+                                <p className="text-[10px] text-slate-500 uppercase font-black text-emerald-500">Rapi</p>
+                                <p className="text-xl font-mono font-bold text-emerald-400">{stats.formatted}</p>
+                            </div>
+                            <button onClick={() => {setFiles([]); setStats({total:0,formatted:0}); showMessage("Antrean dibersihkan");}} className="p-3 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all">
+                                <Icon name="refresh-ccw" />
+                            </button>
+                        </div>
+                    </header>
+
+                    {/* Action Grid - DIPERBAIKI agar tidak overflow */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+                        <label className="flex-1 bg-slate-900/50 border border-slate-800 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 hover:border-blue-500/50 hover:bg-blue-500/5 transition-all cursor-pointer group">
+                            <input type="file" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
+                            <Icon name="file-plus" size={28} className="text-slate-500 group-hover:text-blue-400" />
+                            <span className="text-sm font-bold text-slate-300">Pilih File</span>
+                        </label>
+
+                        <label className="flex-1 bg-slate-900/50 border border-slate-800 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all cursor-pointer group">
+                            <input type="file" webkitdirectory="true" directory="true" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
+                            <Icon name="folder-open" size={28} className="text-slate-500 group-hover:text-emerald-400" />
+                            <span className="text-sm font-bold text-slate-300">Pilih Folder</span>
+                        </label>
+
+                        <button onClick={() => setShowManual(!showManual)} className={`flex-1 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 border transition-all ${showManual ? 'bg-purple-600/20 border-purple-500 text-purple-400' : 'bg-slate-900/50 border-slate-800 text-slate-500 hover:border-purple-500/50'}`}>
+                            <Icon name="edit-2" size={28} />
+                            <span className="text-sm font-bold text-slate-300">Tulis Manual</span>
+                        </button>
+
+                        <div className="flex gap-2 w-full">
+                            <button disabled={files.length === 0 || isProcessing} onClick={runFormat} className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 rounded-2xl flex flex-col items-center justify-center gap-1 shadow-lg shadow-blue-900/20 transition-all">
+                                <Icon name="zap" className={isProcessing ? 'animate-bounce' : ''} />
+                                <span className="text-xs font-black uppercase">Format</span>
+                            </button>
+                            <button disabled={stats.formatted === 0} onClick={downloadZip} className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 rounded-2xl flex flex-col items-center justify-center gap-1 shadow-lg shadow-emerald-900/20 transition-all">
+                                <Icon name="download" />
+                                <span className="text-xs font-black uppercase">ZIP</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Manual Editor Area */}
+                    {showManual && (
+                        <div className="mb-10 p-4 md:p-6 bg-slate-900 rounded-3xl border border-purple-500/30 shadow-2xl animate-in fade-in zoom-in duration-300">
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+                                <div className="flex items-center gap-3">
+                                    <span className="p-2 bg-purple-500/20 rounded-lg"><Icon name="code" className="text-purple-400" /></span>
+                                    <select value={manualType} onChange={(e) => setManualType(e.target.value)} className="bg-slate-800 text-sm font-bold border-none rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-purple-500">
+                                        <option value="js">Javascript/JSON</option>
+                                        <option value="html">HTML</option>
+                                        <option value="css">CSS</option>
+                                    </select>
+                                </div>
+                                <div className="flex gap-2 w-full sm:w-auto">
+                                    <button onClick={copyToClipboard} className="flex-1 sm:flex-none px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-xs flex items-center justify-center gap-2 border border-slate-700">
+                                        <Icon name="copy" size={14} /> Salin Kode
+                                    </button>
+                                    <button onClick={handleManualFormat} className="flex-1 sm:flex-none px-5 py-2 bg-purple-600 hover:bg-purple-500 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-purple-900/40">
+                                        <Icon name="sparkles" size={14} /> Rapikan
+                                    </button>
+                                </div>
+                            </div>
+                            <textarea 
+                                ref={textareaRef}
+                                className="w-full h-72 bg-slate-950 text-emerald-400 font-mono text-sm p-5 rounded-2xl border border-slate-800 focus:border-purple-500/50 outline-none resize-none custom-scrollbar"
+                                placeholder="Tempel (Paste) kode Anda di sini..."
+                                value={manualText}
+                                onChange={(e) => setManualText(e.target.value)}
+                            ></textarea>
+                        </div>
+                    )}
+
+                    {/* Table List */}
+                    <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-md">
+                        <div className="px-6 py-4 bg-slate-900/60 border-b border-slate-800 flex justify-between items-center">
+                            <h2 className="font-bold text-sm flex items-center gap-2">
+                                <Icon name="layers" size={16} className="text-blue-400" />
+                                Antrean File
+                            </h2>
+                            <div className="flex items-center gap-2">
+                                <div className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></div>
+                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Live System</span>
+                            </div>
+                        </div>
+                        <div className="overflow-x-auto custom-scrollbar">
+                            <table className="w-full text-left min-w-[600px]">
+                                <thead className="bg-slate-900/40 text-[10px] text-slate-500 font-black uppercase tracking-widest">
+                                    <tr>
+                                        <th className="px-6 py-4">Nama & Path</th>
+                                        <th className="px-6 py-4">Tipe</th>
+                                        <th className="px-6 py-4">Ukuran</th>
+                                        <th className="px-6 py-4 text-right">Kondisi</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-800/50">
+                                    {files.length === 0 ? (
+                                        <tr>
+                                            <td colSpan="4" className="py-20 text-center">
+                                                <div className="opacity-20 flex flex-col items-center gap-3">
+                                                    <Icon name="inbox" size={48} />
+                                                    <p className="font-bold">Belum ada file dalam daftar</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        files.map((f, i) => (
+                                            <tr key={i} className="hover:bg-slate-800/30 transition-colors group">
+                                                <td className="px-6 py-4">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-sm text-slate-200 group-hover:text-blue-400 transition-colors">{f.name}</span>
+                                                        <span className="text-[10px] font-mono text-slate-500 truncate max-w-[200px]">{f.path}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded border ${
+                                                        f.type === 'js' ? 'border-yellow-500/20 text-yellow-500 bg-yellow-500/5' :
+                                                        f.type === 'html' ? 'border-orange-500/20 text-orange-500 bg-orange-500/5' :
+                                                        'border-blue-500/20 text-blue-500 bg-blue-500/5'
+                                                    }`}>
+                                                        {f.type.toUpperCase()}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-[10px] font-mono text-slate-400">
+                                                    {(f.size / 1024).toFixed(1)} KB
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    {f.status === 'success' ? (
+                                                        <span className="text-emerald-400 font-bold text-[10px] bg-emerald-400/10 px-3 py-1 rounded-full border border-emerald-400/20 inline-flex items-center gap-1">
+                                                            <Icon name="check" size={12} /> RAPI
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-500 font-bold text-[10px] bg-slate-800 px-3 py-1 rounded-full border border-slate-700 inline-flex items-center gap-1">
+                                                            <Icon name="clock" size={12} /> ANTRE
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <footer className="mt-20 pb-10 text-center">
+                        <div className="flex justify-center gap-6 mb-4 opacity-30">
+                            <Icon name="cpu" /> <Icon name="zap" /> <Icon name="code" />
+                        </div>
+                        <p className="text-[9px] font-black tracking-[0.5em] text-slate-600 uppercase">
+                            Global Tunneling Nusantara &bull; Pro Formatter v3.0
+                        </p>
+                    </footer>
                 </div>
             );
         };
