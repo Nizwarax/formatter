@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GTN Formatter Pro V3</title>
+    <title>GTN Formatter Pro V3 - Smart Download</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -119,6 +119,20 @@
                     else if (manualType === 'css') res = window.css_beautify(manualText, options);
                     
                     setManualText(res);
+                    
+                    // Otomatis masukkan ke daftar antrean agar bisa didownload
+                    const manualFile = {
+                        name: `manual_input.${manualType}`,
+                        path: `manual/manual_input.${manualType}`,
+                        content: manualText,
+                        formatted: res,
+                        status: 'success',
+                        size: new Blob([res]).size,
+                        type: manualType
+                    };
+                    setFiles(prev => [manualFile, ...prev]);
+                    setStats(prev => ({ total: prev.total + 1, formatted: prev.formatted + 1 }));
+                    
                     showMessage("Teks manual berhasil dirapikan!");
                 } catch (e) {
                     showMessage("Error: Gagal memformat teks.");
@@ -132,16 +146,32 @@
                 showMessage("Kode berhasil disalin ke clipboard!");
             };
 
-            const downloadZip = async () => {
+            // Smart Download Function
+            const handleSmartDownload = async () => {
+                if (files.length === 0) return;
                 await initLibraries();
-                const zip = new window.JSZip();
-                files.forEach(f => zip.file(f.path, f.formatted || f.content));
-                const blob = await zip.generateAsync({ type: "blob" });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = `GTN_Formatted_${Date.now()}.zip`;
-                link.click();
-                showMessage("File ZIP sedang diunduh...");
+
+                if (files.length === 1) {
+                    // JIKA HANYA 1 FILE: DOWNLOAD LANGSUNG
+                    const file = files[0];
+                    const blob = new Blob([file.formatted || file.content], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = file.name;
+                    link.click();
+                    showMessage(`Mengunduh ${file.name}`);
+                } else {
+                    // JIKA LEBIH DARI 1 FILE: DOWNLOAD ZIP
+                    const zip = new window.JSZip();
+                    files.forEach(f => zip.file(f.path, f.formatted || f.content));
+                    const blob = await zip.generateAsync({ type: "blob" });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = `GTN_Formatted_${Date.now()}.zip`;
+                    link.click();
+                    showMessage("File ZIP sedang diunduh...");
+                }
             };
 
             return (
@@ -176,7 +206,7 @@
                         </div>
                     </header>
 
-                    {/* Action Grid - DIPERBAIKI agar tidak overflow */}
+                    {/* Action Grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
                         <label className="flex-1 bg-slate-900/50 border border-slate-800 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 hover:border-blue-500/50 hover:bg-blue-500/5 transition-all cursor-pointer group">
                             <input type="file" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
@@ -200,9 +230,12 @@
                                 <Icon name="zap" className={isProcessing ? 'animate-bounce' : ''} />
                                 <span className="text-xs font-black uppercase">Format</span>
                             </button>
-                            <button disabled={stats.formatted === 0} onClick={downloadZip} className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 rounded-2xl flex flex-col items-center justify-center gap-1 shadow-lg shadow-emerald-900/20 transition-all">
-                                <Icon name="download" />
-                                <span className="text-xs font-black uppercase">ZIP</span>
+                            {/* SMART DOWNLOAD BUTTON */}
+                            <button disabled={stats.formatted === 0} onClick={handleSmartDownload} className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 rounded-2xl flex flex-col items-center justify-center gap-1 shadow-lg shadow-emerald-900/20 transition-all">
+                                <Icon name={files.length <= 1 ? "download" : "file-archive"} />
+                                <span className="text-xs font-black uppercase">
+                                    {files.length <= 1 ? "Download" : "ZIP"}
+                                </span>
                             </button>
                         </div>
                     </div>
