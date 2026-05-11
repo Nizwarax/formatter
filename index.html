@@ -68,6 +68,7 @@
     const App = () => {
       const [files, setFiles] = useState([]);
       const [manualText, setManualText] = useState("");
+      const [originalManualText, setOriginalManualText] = useState("");
       const [manualType, setManualType] = useState("js");
       const [showManual, setShowManual] = useState(false);
       const [viewMode, setViewMode] = useState("text");
@@ -105,7 +106,7 @@
         el.select();
         document.execCommand('copy');
         document.body.removeChild(el);
-        showMessage("Berhasil disalin ke clipboard!");
+        showMessage("Berhasil disalin!");
       };
 
       const normalizeData = (text) => {
@@ -122,14 +123,12 @@
       };
 
       const handleFiles = async (uploaded) => {
-        const validExts = ['.js', '.json', '.html', '.css', '.txt', '.csv'];
-        const filtered = Array.from(uploaded).filter(f => validExts.some(ext => f.name.toLowerCase().endsWith(ext)));
-
-        const newData = await Promise.all(filtered.map(async f => ({
+        // Power Feature: Support SEMUA ekstensi (Filter dihapus)
+        const newData = await Promise.all(Array.from(uploaded).map(async f => ({
           id: Math.random().toString(36).substr(2, 9),
           name: f.name,
           path: f.webkitRelativePath || f.name,
-          content: await f.text(),
+          content: await f.text(), // Ini adalah data asli
           formatted: null,
           status: 'pending',
           size: f.size,
@@ -152,7 +151,7 @@
             if (f.type === 'js' || f.type === 'json') res = window.js_beautify(f.content, options);
             else if (f.type === 'html') res = window.html_beautify(f.content, options);
             else if (f.type === 'css') res = window.css_beautify(f.content, options);
-            else if (f.type === 'txt' || f.type === 'csv') res = normalizeData(f.content);
+            else res = normalizeData(f.content);
             return { ...f, formatted: res, status: 'success' };
           } catch (e) {
             return { ...f, status: 'error' };
@@ -166,6 +165,9 @@
 
       const handleManualFormat = async () => {
         if (!manualText.trim()) return;
+        // Simpan teks asli jika baru pertama kali dijalankan
+        if (!originalManualText) setOriginalManualText(manualText);
+        
         await initLibraries();
         const options = { indent_size: 2, space_before_conditional: true, end_with_newline: true };
         let res = manualText;
@@ -230,7 +232,7 @@
                     <button onClick={() => copyToClipboard(previewFile.formatted || previewFile.content)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold flex items-center gap-2 transition-all">
                       <Icon name="copy" size={14} /> Salin Hasil
                     </button>
-                    <button onClick={() => setPreviewFile(null)} className="p-2 hover:bg-slate-800 rounded-full"><Icon name="x" /></button>
+                    <button onClick={() => setPreviewFile(null)} className="p-2 hover:bg-slate-800 rounded-full transition-all"><Icon name="x" /></button>
                   </div>
                 </div>
                 <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-800">
@@ -253,14 +255,14 @@
                 <Icon name="cpu" size={28} className="text-white" />
               </div>
               <div>
-                <h1 className="text-3xl font-extrabold tracking-tight">GTN Formatter <span className="text-blue-500 italic">Pro</span></h1>
+                <h1 className="text-3xl font-extrabold tracking-tight text-white">GTN Formatter <span className="text-blue-500 italic">Pro</span></h1>
                 <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Enterprise Normalization & Code Beautifier</p>
               </div>
             </div>
             <div className="flex gap-2 bg-slate-900/50 p-2 rounded-2xl border border-slate-800">
               <div className="px-4 py-2 bg-slate-950 rounded-xl border border-slate-800 text-center min-w-[80px]">
                 <p className="text-[9px] text-slate-600 font-black">TOTAL</p>
-                <p className="text-xl font-bold">{stats.total}</p>
+                <p className="text-xl font-bold text-white">{stats.total}</p>
               </div>
               <div className="px-4 py-2 bg-slate-950 rounded-xl border border-slate-800 text-center min-w-[80px]">
                 <p className="text-[9px] text-emerald-500 font-black">RAPI</p>
@@ -272,7 +274,7 @@
             </div>
           </header>
 
-          {/* Actions Grid */}
+          {/* Actions Grid - Tampilan Asli Sesuai Permintaan */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 mb-8">
             <label className="bg-slate-900/50 border border-slate-800 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 hover:border-blue-500/50 transition-all cursor-pointer group">
               <input type="file" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
@@ -288,19 +290,23 @@
               <Icon name="edit-3" />
               <span className="text-xs font-bold">Tulis Manual</span>
             </button>
-            <button disabled={stats.total === 0 || isProcessing} onClick={runFormatAll} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 rounded-2xl flex flex-col items-center justify-center gap-1 font-bold transition-all shadow-lg shadow-blue-900/20">
-              <Icon name="zap" className={isProcessing ? 'animate-spin' : ''} />
+            
+            {/* Tombol Format Semua - Tetap desain Pro tapi fungsional */}
+            <button disabled={stats.total === 0 || isProcessing} onClick={runFormatAll} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 rounded-2xl flex flex-col items-center justify-center gap-1 font-bold transition-all shadow-lg shadow-blue-900/20 text-white">
+              <Icon name="zap" className={isProcessing ? 'animate-spin' : ''} fill="currentColor" />
               <span className="text-[10px] uppercase">Format Semua</span>
             </button>
-            <button disabled={stats.done === 0} onClick={handleSmartDownload} className="bg-slate-100 hover:bg-white text-slate-950 disabled:bg-slate-800 disabled:text-slate-500 rounded-2xl flex flex-col items-center justify-center gap-1 font-bold transition-all">
-              <Icon name={stats.done > 1 ? "package" : "download"} />
-              <span className="text-[10px] uppercase">{stats.done > 1 ? "Download ZIP" : "Download File"}</span>
+            
+            {/* Tombol Download - Teks selalu DOWNLOAD FILE sesuai foto */}
+            <button disabled={stats.done === 0} onClick={handleSmartDownload} className="bg-white hover:bg-slate-100 text-slate-950 disabled:bg-slate-800 disabled:text-slate-500 rounded-2xl flex flex-col items-center justify-center gap-1 font-bold transition-all">
+              <Icon name="download" />
+              <span className="text-[10px] uppercase">Download File</span>
             </button>
           </div>
 
           {/* Manual Editor */}
           {showManual && (
-            <div className="mb-10 p-6 bg-slate-900 rounded-3xl border border-purple-500/30 shadow-2xl animate-fade-in">
+            <div className="mb-10 p-6 bg-slate-900 rounded-3xl border border-purple-500/30 shadow-2xl animate-fade-in relative">
               <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
                 <div className="flex bg-slate-950 p-1 rounded-xl border border-slate-800">
                   {['js', 'html', 'css', 'data'].map(t => (
@@ -314,10 +320,16 @@
                   <button onClick={() => setViewMode('table')} className={`px-4 py-1.5 rounded-lg text-[10px] font-black transition-all ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'text-slate-500'}`}>TABLE</button>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
-                    <button onClick={() => copyToClipboard(manualText)} className="flex-1 sm:px-6 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all">
+                    {/* Power Feature: Tombol Panah Melengkung (Revert) */}
+                    {originalManualText && manualText !== originalManualText && (
+                        <button onClick={() => { setManualText(originalManualText); showMessage("Kembali ke awal"); }} className="p-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-orange-400 transition-all shadow-lg" title="Kembali ke awal">
+                            <Icon name="rotate-ccw" size={16} />
+                        </button>
+                    )}
+                    <button onClick={() => copyToClipboard(manualText)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all">
                         <Icon name="copy" size={14} /> Salin
                     </button>
-                    <button onClick={handleManualFormat} className="flex-1 sm:px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-purple-900/40 transition-all">
+                    <button onClick={handleManualFormat} className="flex-1 sm:px-6 py-2 bg-purple-600 hover:bg-purple-500 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-purple-900/40 text-white">
                         <Icon name="sparkles" size={14} /> Jalankan
                     </button>
                 </div>
@@ -327,7 +339,11 @@
                   className="w-full h-80 bg-slate-950 text-emerald-400 font-mono text-sm p-6 rounded-2xl border border-slate-800 focus:border-purple-500/50 outline-none resize-none custom-scrollbar shadow-inner"
                   placeholder="Tempel kode atau data di sini..."
                   value={manualText}
-                  onChange={(e) => setManualText(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setManualText(val);
+                    if(!originalManualText && val) setOriginalManualText(val);
+                  }}
                 />
               ) : (
                 <div className="w-full h-80 bg-slate-950 p-6 rounded-2xl border border-slate-800 overflow-auto custom-scrollbar">
@@ -351,10 +367,10 @@
           {/* Table Queue */}
           <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
             <div className="px-6 py-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/60">
-              <h2 className="font-bold text-sm flex items-center gap-2">
+              <h2 className="font-bold text-sm flex items-center gap-2 text-white">
                 <Icon name="layers" size={16} className="text-blue-400" /> Antrean File
               </h2>
-              <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">JS, HTML, CSS, TXT, CSV</span>
+              <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Universal Mode Active</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
@@ -370,8 +386,8 @@
                   {files.length === 0 ? (
                     <tr>
                       <td colSpan="4" className="py-24 text-center opacity-20">
-                        <Icon name="inbox" size={48} className="mx-auto mb-3" />
-                        <p className="font-bold text-sm">Antrean Kosong</p>
+                        <Icon name="inbox" size={48} className="mx-auto mb-3 text-slate-500" />
+                        <p className="font-bold text-sm text-slate-400">ANTREAN KOSONG</p>
                       </td>
                     </tr>
                   ) : (
@@ -379,12 +395,12 @@
                       <tr key={f.id} className="hover:bg-slate-800/30 transition-colors group">
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
-                            <span className="text-sm font-bold group-hover:text-blue-400 transition-colors">{f.name}</span>
+                            <span className="text-sm font-bold group-hover:text-blue-400 transition-colors text-slate-200">{f.name}</span>
                             <span className="text-[10px] mono text-slate-600 truncate max-w-[200px]">{f.path}</span>
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-[10px] font-bold uppercase">{f.type}</span>
+                          <span className="px-2 py-0.5 bg-slate-800 border border-slate-700 rounded text-[10px] font-bold uppercase text-slate-400">{f.type}</span>
                         </td>
                         <td className="px-6 py-4">
                           {f.status === 'success' ? (
@@ -392,17 +408,23 @@
                               <Icon name="check" size={12} /> RAPI
                             </span>
                           ) : (
-                            <span className="text-slate-500 text-[10px] font-black flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-full border border-slate-700">
+                            <span className="text-slate-600 text-[10px] font-black flex items-center gap-1 bg-slate-800 px-2 py-1 rounded-full border border-slate-700">
                               <Icon name="clock" size={12} /> ANTRE
                             </span>
                           )}
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-2">
-                            <button onClick={() => copyToClipboard(f.formatted || f.content)} className="p-2 text-slate-500 hover:text-white hover:bg-slate-800 rounded-lg transition-all" title="Salin">
+                            {/* Power Feature: Tombol Revert di baris tabel */}
+                            {f.status === 'success' && (
+                                <button onClick={() => setFiles(prev => prev.map(item => item.id === f.id ? {...item, formatted: null, status: 'pending'} : item))} className="p-2 text-slate-500 hover:text-orange-400 transition-all" title="Kembali ke awal">
+                                    <Icon name="rotate-ccw" size={16} />
+                                </button>
+                            )}
+                            <button onClick={() => copyToClipboard(f.formatted || f.content)} className="p-2 text-slate-500 hover:text-white transition-all" title="Salin">
                               <Icon name="copy" size={16} />
                             </button>
-                            <button onClick={() => setPreviewFile(f)} className="p-2 text-slate-500 hover:text-blue-400 hover:bg-blue-400/10 rounded-lg transition-all" title="Lihat">
+                            <button onClick={() => setPreviewFile(f)} className="p-2 text-slate-500 hover:text-blue-400 rounded-lg transition-all" title="Lihat">
                               <Icon name="eye" size={16} />
                             </button>
                           </div>
@@ -419,7 +441,7 @@
             <div className="flex gap-10 grayscale hover:grayscale-0 transition-all duration-700">
               <Icon name="cpu" size={24} /> <Icon name="zap" size={24} /> <Icon name="shield" size={24} />
             </div>
-            <p className="text-[9px] font-black tracking-[0.5em] uppercase text-slate-500">GTN Enterprise &bull; Pro Formatter v7.0 Ultimate</p>
+            <p className="text-[9px] font-black tracking-[0.5em] uppercase text-slate-500">GTN Enterprise &bull; Pro Formatter v8.0 Permanent</p>
           </footer>
         </div>
       );
