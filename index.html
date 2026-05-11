@@ -1,362 +1,450 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GTN Formatter Pro V3 - Smart Download</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap');
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background-color: #020617; }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
-        .toast-enter { transform: translateY(100%); opacity: 0; }
-        .toast-active { transform: translateY(0); opacity: 1; transition: all 0.3s ease; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GTN Formatter Pro Ultimate</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #020617;
+    }
+
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 10px;
+    }
+
+    .animate-in {
+      animation: fadeIn 0.3s ease-out forwards;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  </style>
 </head>
+
 <body class="text-slate-200">
-    <div id="root"></div>
+  <div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
 
-        // Komponen Ikon Lucide
-        const Icon = ({ name, size = 18, className = "" }) => {
-            useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
-            return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
-        };
+    // Komponen Ikon Lucide
+    const Icon = ({ name, size = 18, className = "" }) => {
+      useEffect(() => { if (window.lucide) window.lucide.createIcons(); }, [name]);
+      return <i data-lucide={name} style={{ width: size, height: size }} className={className}></i>;
+    };
 
-        const App = () => {
-            const [files, setFiles] = useState([]);
-            const [stats, setStats] = useState({ total: 0, formatted: 0 });
-            const [manualText, setManualText] = useState("");
-            const [manualType, setManualType] = useState("js");
-            const [showManual, setShowManual] = useState(false);
-            const [toast, setToast] = useState({ show: false, message: "" });
-            const [isProcessing, setIsProcessing] = useState(false);
-            const textareaRef = useRef(null);
+    const App = () => {
+      const [files, setFiles] = useState([]);
+      const [manualText, setManualText] = useState("");
+      const [manualType, setManualType] = useState("js");
+      const [showManual, setShowManual] = useState(false);
+      const [viewMode, setViewMode] = useState("text"); 
+      const [toast, setToast] = useState({ show: false, message: "" });
+      const [isProcessing, setIsProcessing] = useState(false);
+      const [previewFile, setPreviewFile] = useState(null);
+      const textareaRef = useRef(null);
 
-            // Fungsi Notifikasi
-            const showMessage = (msg) => {
-                setToast({ show: true, message: msg });
-                setTimeout(() => setToast({ show: false, message: "" }), 3000);
-            };
+      // Fungsi Notifikasi
+      const showMessage = (msg) => {
+        setToast({ show: true, message: msg });
+        setTimeout(() => setToast({ show: false, message: "" }), 3000);
+      };
 
-            const loadScript = (url) => {
-                return new Promise((resolve) => {
-                    const script = document.createElement('script');
-                    script.src = url;
-                    script.onload = resolve;
-                    document.head.appendChild(script);
-                });
-            };
+      // Memuat Library eksternal
+      const loadScript = (url) => {
+        return new Promise((resolve) => {
+          const script = document.createElement('script');
+          script.src = url;
+          script.onload = resolve;
+          document.head.appendChild(script);
+        });
+      };
 
-            const initLibraries = async () => {
-                if (!window.js_beautify) {
-                    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.7/beautify.min.js');
-                    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.7/beautify-html.min.js');
-                    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.7/beautify-css.min.js');
-                    await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
-                }
-            };
+      const initLibraries = async () => {
+        if (!window.js_beautify) {
+          await loadScript('https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.7/beautify.min.js');
+          await loadScript('https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.7/beautify-html.min.js');
+          await loadScript('https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.14.7/beautify-css.min.js');
+          await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+        }
+      };
 
-            const handleFiles = async (uploaded) => {
-                const validExts = ['.js', '.json', '.html', '.css', '.txt'];
-                const filtered = Array.from(uploaded).filter(f => validExts.some(ext => f.name.toLowerCase().endsWith(ext)));
-                
-                const newData = await Promise.all(filtered.map(async f => ({
-                    name: f.name,
-                    path: f.webkitRelativePath || f.name,
-                    content: await f.text(),
-                    formatted: null,
-                    status: 'pending',
-                    size: f.size,
-                    type: f.name.split('.').pop()
-                })));
+      // Fungsi Salin ke Clipboard (Iframe Compatible)
+      const copyToClipboard = (text) => {
+        const el = document.createElement('textarea');
+        el.value = text;
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand('copy');
+        document.body.removeChild(el);
+        showMessage("Berhasil disalin ke clipboard!");
+      };
 
-                setFiles(prev => [...prev, ...newData]);
-                setStats(prev => ({ ...prev, total: prev.total + newData.length }));
-                showMessage(`${newData.length} file berhasil ditambahkan`);
-            };
+      // Logika Normalisasi Data Teks (V7 Engine)
+      const normalizeData = (text) => {
+        return text.split('\n').map(line => line.trim()).filter(l => l.length > 0).map((line, idx) => {
+          let clean = line.replace(/[;|]/g, ',').replace(/_/g, ' ').replace(/\s+/g, ' ').replace(/^##\s*/, '');
+          let parts = clean.split(',').map(p => p.trim());
+          const toTitle = (s) => s.toLowerCase().split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          
+          if (idx === 0) return parts.map(h => h.toLowerCase().includes('nama') ? 'Nama Lengkap' : h.toLowerCase().includes('kota') ? 'Kota Asal' : toTitle(h)).join(' , ');
+          if (parts.length >= 2) parts[1] = toTitle(parts[1]);
+          if (parts.length >= 4) parts[3] = toTitle(parts[3]);
+          return parts.join(' , ');
+        }).join('\n');
+      };
 
-            const runFormat = async () => {
-                if (files.length === 0) return;
-                await initLibraries();
-                setIsProcessing(true);
-                const options = { indent_size: 2, space_before_conditional: true, end_with_newline: true };
+      const handleFiles = async (uploaded) => {
+        const validExts = ['.js', '.json', '.html', '.css', '.txt', '.csv'];
+        const filtered = Array.from(uploaded).filter(f => validExts.some(ext => f.name.toLowerCase().endsWith(ext)));
+        
+        const newData = await Promise.all(filtered.map(async f => ({
+          id: Math.random().toString(36).substr(2, 9),
+          name: f.name,
+          path: f.webkitRelativePath || f.name,
+          content: await f.text(),
+          formatted: null,
+          status: 'pending',
+          size: f.size,
+          type: f.name.split('.').pop().toLowerCase()
+        })));
 
-                const updated = files.map(f => {
-                    try {
-                        let res = f.content;
-                        if (f.type === 'js' || f.type === 'json') res = window.js_beautify(f.content, options);
-                        else if (f.type === 'html') res = window.html_beautify(f.content, options);
-                        else if (f.type === 'css') res = window.css_beautify(f.content, options);
-                        return { ...f, formatted: res, status: 'success' };
-                    } catch (e) {
-                        return { ...f, status: 'error' };
-                    }
-                });
+        setFiles(prev => [...prev, ...newData]);
+        showMessage(`${newData.length} file ditambahkan.`);
+      };
 
-                setFiles(updated);
-                setStats(prev => ({ ...prev, formatted: updated.filter(x => x.status === 'success').length }));
-                setIsProcessing(false);
-                showMessage("Format massal selesai!");
-            };
+      const runFormatAll = async () => {
+        if (files.length === 0) return;
+        await initLibraries();
+        setIsProcessing(true);
+        const options = { indent_size: 2, space_before_conditional: true, end_with_newline: true };
 
-            const handleManualFormat = async () => {
-                if (!manualText.trim()) return;
-                await initLibraries();
-                try {
-                    const options = { indent_size: 2, space_before_conditional: true, end_with_newline: true };
-                    let res = manualText;
-                    if (manualType === 'js') res = window.js_beautify(manualText, options);
-                    else if (manualType === 'html') res = window.html_beautify(manualText, options);
-                    else if (manualType === 'css') res = window.css_beautify(manualText, options);
-                    
-                    setManualText(res);
-                    
-                    // Otomatis masukkan ke daftar antrean agar bisa didownload
-                    const manualFile = {
-                        name: `manual_input.${manualType}`,
-                        path: `manual/manual_input.${manualType}`,
-                        content: manualText,
-                        formatted: res,
-                        status: 'success',
-                        size: new Blob([res]).size,
-                        type: manualType
-                    };
-                    setFiles(prev => [manualFile, ...prev]);
-                    setStats(prev => ({ total: prev.total + 1, formatted: prev.formatted + 1 }));
-                    
-                    showMessage("Teks manual berhasil dirapikan!");
-                } catch (e) {
-                    showMessage("Error: Gagal memformat teks.");
-                }
-            };
+        const updated = files.map(f => {
+          try {
+            let res = f.content;
+            if (f.type === 'js' || f.type === 'json') res = window.js_beautify(f.content, options);
+            else if (f.type === 'html') res = window.html_beautify(f.content, options);
+            else if (f.type === 'css') res = window.css_beautify(f.content, options);
+            else if (f.type === 'txt' || f.type === 'csv') res = normalizeData(f.content);
+            return { ...f, formatted: res, status: 'success' };
+          } catch (e) {
+            return { ...f, status: 'error' };
+          }
+        });
 
-            const copyToClipboard = () => {
-                if (!manualText.trim()) return;
-                textareaRef.current.select();
-                document.execCommand('copy');
-                showMessage("Kode berhasil disalin ke clipboard!");
-            };
+        setFiles(updated);
+        setIsProcessing(false);
+        showMessage("Format massal selesai!");
+      };
 
-            // Smart Download Function
-            const handleSmartDownload = async () => {
-                if (files.length === 0) return;
-                await initLibraries();
+      const handleManualFormat = async () => {
+        if (!manualText.trim()) return;
+        await initLibraries();
+        const options = { indent_size: 2, space_before_conditional: true, end_with_newline: true };
+        let res = manualText;
+        if (manualType === 'js') res = window.js_beautify(manualText, options);
+        else if (manualType === 'html') res = window.html_beautify(manualText, options);
+        else if (manualType === 'css') res = window.css_beautify(manualText, options);
+        else if (manualType === 'data') res = normalizeData(manualText);
+        
+        setManualText(res);
+        showMessage("Data manual berhasil dirapikan!");
+      };
 
-                if (files.length === 1) {
-                    // JIKA HANYA 1 FILE: DOWNLOAD LANGSUNG
-                    const file = files[0];
-                    const blob = new Blob([file.formatted || file.content], { type: 'text/plain' });
-                    const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = file.name;
-                    link.click();
-                    showMessage(`Mengunduh ${file.name}`);
-                } else {
-                    // JIKA LEBIH DARI 1 FILE: DOWNLOAD ZIP
-                    const zip = new window.JSZip();
-                    files.forEach(f => zip.file(f.path, f.formatted || f.content));
-                    const blob = await zip.generateAsync({ type: "blob" });
-                    const link = document.createElement('a');
-                    link.href = URL.createObjectURL(blob);
-                    link.download = `GTN_Formatted_${Date.now()}.zip`;
-                    link.click();
-                    showMessage("File ZIP sedang diunduh...");
-                }
-            };
+      // Smart Download Logic
+      const handleSmartDownload = async () => {
+        const readyFiles = files.filter(f => f.status === 'success');
+        if (readyFiles.length === 0) {
+          showMessage("Belum ada file yang diproses.");
+          return;
+        }
 
-            return (
-                <div className="min-h-screen p-4 md:p-10 max-w-6xl mx-auto overflow-x-hidden">
-                    {/* Header Notifikasi */}
-                    <div className={`fixed bottom-6 right-6 z-50 bg-blue-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 transition-all duration-300 ${toast.show ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'}`}>
-                        <Icon name="info" />
-                        <span className="font-bold text-sm">{toast.message}</span>
-                    </div>
+        if (readyFiles.length === 1) {
+          const f = readyFiles[0];
+          const blob = new Blob([f.formatted || f.content], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `Formatted_${f.name}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          showMessage("Mengunduh file...");
+        } else {
+          await initLibraries();
+          const zip = new window.JSZip();
+          readyFiles.forEach(f => zip.file(f.path, f.formatted || f.content));
+          const blob = await zip.generateAsync({ type: "blob" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `GTN_Export_${Date.now()}.zip`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          showMessage("Mengunduh ZIP...");
+        }
+      };
 
-                    <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-10">
-                        <div className="space-y-1">
-                            <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-600 bg-clip-text text-transparent flex items-center gap-3">
-                                <Icon name="cpu" size={36} className="text-cyan-400" />
-                                GTN Formatter
-                            </h1>
-                            <p className="text-slate-500 font-medium">Auto-align script untuk File, Folder, atau Teks Manual.</p>
-                        </div>
-                        
-                        <div className="flex flex-wrap items-center gap-2 bg-slate-900/80 p-2 rounded-2xl border border-slate-800 w-full lg:w-auto">
-                            <div className="flex-1 lg:flex-none px-4 py-2 bg-slate-950 rounded-xl border border-slate-800 min-w-[80px]">
-                                <p className="text-[10px] text-slate-500 uppercase font-black">Total</p>
-                                <p className="text-xl font-mono font-bold text-white">{stats.total}</p>
-                            </div>
-                            <div className="flex-1 lg:flex-none px-4 py-2 bg-slate-950 rounded-xl border border-slate-800 min-w-[80px]">
-                                <p className="text-[10px] text-slate-500 uppercase font-black text-emerald-500">Rapi</p>
-                                <p className="text-xl font-mono font-bold text-emerald-400">{stats.formatted}</p>
-                            </div>
-                            <button onClick={() => {setFiles([]); setStats({total:0,formatted:0}); showMessage("Antrean dibersihkan");}} className="p-3 text-slate-400 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all">
-                                <Icon name="refresh-ccw" />
-                            </button>
-                        </div>
-                    </header>
+      const stats = useMemo(() => ({
+        total: files.length,
+        done: files.filter(f => f.status === 'success').length
+      }), [files]);
 
-                    {/* Action Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-                        <label className="flex-1 bg-slate-900/50 border border-slate-800 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 hover:border-blue-500/50 hover:bg-blue-500/5 transition-all cursor-pointer group">
-                            <input type="file" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
-                            <Icon name="file-plus" size={28} className="text-slate-500 group-hover:text-blue-400" />
-                            <span className="text-sm font-bold text-slate-300">Pilih File</span>
-                        </label>
+      return (
+        <div className="min-h-screen p-4 md:p-10 max-w-6xl mx-auto selection:bg-blue-500/30">
+          {/* Toast */}
+          <div className={`fixed bottom-6 right-6 z-[100] bg-blue-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 transition-all duration-300 ${toast.show ? 'translate-y-0 opacity-100' : 'translate-y-20 opacity-0'}`}>
+            <Icon name="check-circle" /> <span className="font-bold text-sm">{toast.message}</span>
+          </div>
 
-                        <label className="flex-1 bg-slate-900/50 border border-slate-800 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all cursor-pointer group">
-                            <input type="file" webkitdirectory="true" directory="true" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
-                            <Icon name="folder-open" size={28} className="text-slate-500 group-hover:text-emerald-400" />
-                            <span className="text-sm font-bold text-slate-300">Pilih Folder</span>
-                        </label>
-
-                        <button onClick={() => setShowManual(!showManual)} className={`flex-1 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 border transition-all ${showManual ? 'bg-purple-600/20 border-purple-500 text-purple-400' : 'bg-slate-900/50 border-slate-800 text-slate-500 hover:border-purple-500/50'}`}>
-                            <Icon name="edit-2" size={28} />
-                            <span className="text-sm font-bold text-slate-300">Tulis Manual</span>
-                        </button>
-
-                        <div className="flex gap-2 w-full">
-                            <button disabled={files.length === 0 || isProcessing} onClick={runFormat} className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 disabled:text-slate-600 rounded-2xl flex flex-col items-center justify-center gap-1 shadow-lg shadow-blue-900/20 transition-all">
-                                <Icon name="zap" className={isProcessing ? 'animate-bounce' : ''} />
-                                <span className="text-xs font-black uppercase">Format</span>
-                            </button>
-                            {/* SMART DOWNLOAD BUTTON */}
-                            <button disabled={stats.formatted === 0} onClick={handleSmartDownload} className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 rounded-2xl flex flex-col items-center justify-center gap-1 shadow-lg shadow-emerald-900/20 transition-all">
-                                <Icon name={files.length <= 1 ? "download" : "file-archive"} />
-                                <span className="text-xs font-black uppercase">
-                                    {files.length <= 1 ? "Download" : "ZIP"}
-                                </span>
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Manual Editor Area */}
-                    {showManual && (
-                        <div className="mb-10 p-4 md:p-6 bg-slate-900 rounded-3xl border border-purple-500/30 shadow-2xl animate-in fade-in zoom-in duration-300">
-                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-                                <div className="flex items-center gap-3">
-                                    <span className="p-2 bg-purple-500/20 rounded-lg"><Icon name="code" className="text-purple-400" /></span>
-                                    <select value={manualType} onChange={(e) => setManualType(e.target.value)} className="bg-slate-800 text-sm font-bold border-none rounded-xl px-4 py-2 outline-none focus:ring-2 focus:ring-purple-500">
-                                        <option value="js">Javascript/JSON</option>
-                                        <option value="html">HTML</option>
-                                        <option value="css">CSS</option>
-                                    </select>
-                                </div>
-                                <div className="flex gap-2 w-full sm:w-auto">
-                                    <button onClick={copyToClipboard} className="flex-1 sm:flex-none px-5 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl font-bold text-xs flex items-center justify-center gap-2 border border-slate-700">
-                                        <Icon name="copy" size={14} /> Salin Kode
-                                    </button>
-                                    <button onClick={handleManualFormat} className="flex-1 sm:flex-none px-5 py-2 bg-purple-600 hover:bg-purple-500 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-purple-900/40">
-                                        <Icon name="sparkles" size={14} /> Rapikan
-                                    </button>
-                                </div>
-                            </div>
-                            <textarea 
-                                ref={textareaRef}
-                                className="w-full h-72 bg-slate-950 text-emerald-400 font-mono text-sm p-5 rounded-2xl border border-slate-800 focus:border-purple-500/50 outline-none resize-none custom-scrollbar"
-                                placeholder="Tempel (Paste) kode Anda di sini..."
-                                value={manualText}
-                                onChange={(e) => setManualText(e.target.value)}
-                            ></textarea>
-                        </div>
-                    )}
-
-                    {/* Table List */}
-                    <div className="bg-slate-900/40 border border-slate-800 rounded-3xl overflow-hidden backdrop-blur-md">
-                        <div className="px-6 py-4 bg-slate-900/60 border-b border-slate-800 flex justify-between items-center">
-                            <h2 className="font-bold text-sm flex items-center gap-2">
-                                <Icon name="layers" size={16} className="text-blue-400" />
-                                Antrean File
-                            </h2>
-                            <div className="flex items-center gap-2">
-                                <div className="w-2 h-2 rounded-full bg-blue-500 animate-ping"></div>
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Live System</span>
-                            </div>
-                        </div>
-                        <div className="overflow-x-auto custom-scrollbar">
-                            <table className="w-full text-left min-w-[600px]">
-                                <thead className="bg-slate-900/40 text-[10px] text-slate-500 font-black uppercase tracking-widest">
-                                    <tr>
-                                        <th className="px-6 py-4">Nama & Path</th>
-                                        <th className="px-6 py-4">Tipe</th>
-                                        <th className="px-6 py-4">Ukuran</th>
-                                        <th className="px-6 py-4 text-right">Kondisi</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-800/50">
-                                    {files.length === 0 ? (
-                                        <tr>
-                                            <td colSpan="4" className="py-20 text-center">
-                                                <div className="opacity-20 flex flex-col items-center gap-3">
-                                                    <Icon name="inbox" size={48} />
-                                                    <p className="font-bold">Belum ada file dalam daftar</p>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        files.map((f, i) => (
-                                            <tr key={i} className="hover:bg-slate-800/30 transition-colors group">
-                                                <td className="px-6 py-4">
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold text-sm text-slate-200 group-hover:text-blue-400 transition-colors">{f.name}</span>
-                                                        <span className="text-[10px] font-mono text-slate-500 truncate max-w-[200px]">{f.path}</span>
-                                                    </div>
-                                                </td>
-                                                <td className="px-6 py-4">
-                                                    <span className={`text-[9px] font-black px-2 py-0.5 rounded border ${
-                                                        f.type === 'js' ? 'border-yellow-500/20 text-yellow-500 bg-yellow-500/5' :
-                                                        f.type === 'html' ? 'border-orange-500/20 text-orange-500 bg-orange-500/5' :
-                                                        'border-blue-500/20 text-blue-500 bg-blue-500/5'
-                                                    }`}>
-                                                        {f.type.toUpperCase()}
-                                                    </span>
-                                                </td>
-                                                <td className="px-6 py-4 text-[10px] font-mono text-slate-400">
-                                                    {(f.size / 1024).toFixed(1)} KB
-                                                </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    {f.status === 'success' ? (
-                                                        <span className="text-emerald-400 font-bold text-[10px] bg-emerald-400/10 px-3 py-1 rounded-full border border-emerald-400/20 inline-flex items-center gap-1">
-                                                            <Icon name="check" size={12} /> RAPI
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-slate-500 font-bold text-[10px] bg-slate-800 px-3 py-1 rounded-full border border-slate-700 inline-flex items-center gap-1">
-                                                            <Icon name="clock" size={12} /> ANTRE
-                                                        </span>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-
-                    <footer className="mt-20 pb-10 text-center">
-                        <div className="flex justify-center gap-6 mb-4 opacity-30">
-                            <Icon name="cpu" /> <Icon name="zap" /> <Icon name="code" />
-                        </div>
-                        <p className="text-[9px] font-black tracking-[0.5em] text-slate-600 uppercase">
-                            Global Tunneling Nusantara &bull; Pro Formatter v3.0
-                        </p>
-                    </footer>
+          {/* Preview Modal */}
+          {previewFile && (
+            <div className="fixed inset-0 z-[90] bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 animate-in">
+              <div className="bg-slate-900 border border-slate-800 w-full max-w-6xl h-[85vh] rounded-3xl flex flex-col shadow-3xl overflow-hidden">
+                <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-500/20 rounded-lg text-blue-400"><Icon name="file-text" size={20}/></div>
+                    <h3 className="font-bold">{previewFile.name}</h3>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => copyToClipboard(previewFile.formatted || previewFile.content)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-xl text-xs font-bold flex items-center gap-2 transition-all">
+                      <Icon name="copy" size={14}/> Salin Hasil
+                    </button>
+                    <button onClick={() => setPreviewFile(null)} className="p-2 hover:bg-red-500/20 text-red-400 rounded-full transition-all"><Icon name="x" size={24}/></button>
+                  </div>
                 </div>
-            );
-        };
+                <div className="flex-1 overflow-hidden grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-800/50">
+                  <div className="bg-slate-950 p-6 overflow-auto custom-scrollbar">
+                    <p className="text-[10px] font-black text-slate-600 mb-4 tracking-widest uppercase">Original Data</p>
+                    <pre className="text-xs mono text-slate-500 whitespace-pre">{previewFile.content}</pre>
+                  </div>
+                  <div className="bg-slate-950 p-6 overflow-auto custom-scrollbar border-l border-slate-800">
+                    <p className="text-[10px] font-black text-blue-500 mb-4 tracking-widest uppercase">Optimized Result</p>
+                    <pre className="text-xs mono text-emerald-400 whitespace-pre">{previewFile.formatted || "Process required..."}</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+          <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8 mb-12">
+            <div className="flex items-center gap-5">
+              <div className="p-4 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-3xl shadow-2xl shadow-blue-900/40 border border-white/10">
+                <Icon name="layers" size={32} className="text-white"/>
+              </div>
+              <div>
+                <h1 className="text-3xl font-extrabold tracking-tight">GTN Formatter <span className="text-blue-500 italic">Pro</span></h1>
+                <p className="text-slate-500 text-xs font-bold uppercase tracking-widest">Enterprise Normalization & Code Beautifier</p>
+              </div>
+            </div>
+            <div className="flex gap-2 bg-slate-900/50 p-2 rounded-2xl border border-slate-800">
+              <div className="px-5 py-3 bg-slate-950 rounded-xl border border-slate-800 text-center min-w-[90px]">
+                <p className="text-[9px] text-slate-600 font-black tracking-widest">TOTAL</p>
+                <p className="text-2xl font-black text-white">{stats.total}</p>
+              </div>
+              <div className="px-5 py-3 bg-slate-950 rounded-xl border border-slate-800 text-center min-w-[90px]">
+                <p className="text-[9px] text-emerald-500 font-black tracking-widest">RAPI</p>
+                <p className="text-2xl font-black text-emerald-400">{stats.done}</p>
+              </div>
+              <button onClick={() => { setFiles([]); showMessage("Antrean dibersihkan"); }} className="px-4 text-slate-600 hover:text-red-500 transition-all"><Icon name="refresh-ccw"/></button>
+            </div>
+          </header>
+
+          {/* Action Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-10">
+            <label className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 hover:border-blue-500/50 hover:bg-blue-500/5 transition-all cursor-pointer group">
+              <input type="file" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
+              <Icon name="file-plus" size={28} className="text-slate-600 group-hover:text-blue-400" />
+              <span className="text-xs font-bold text-slate-400">Pilih File</span>
+            </label>
+            <label className="bg-slate-900/40 border border-slate-800 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 hover:border-emerald-500/50 hover:bg-emerald-500/5 transition-all cursor-pointer group">
+              <input type="file" webkitdirectory="true" directory="true" multiple onChange={(e) => handleFiles(e.target.files)} className="hidden" />
+              <Icon name="folder-plus" size={28} className="text-slate-600 group-hover:text-emerald-400" />
+              <span className="text-xs font-bold text-slate-400">Pilih Folder</span>
+            </label>
+            <button onClick={() => setShowManual(!showManual)} className={`rounded-3xl p-6 flex flex-col items-center justify-center gap-3 border transition-all ${showManual ? 'bg-purple-600/20 border-purple-500 text-purple-400' : 'bg-slate-900/40 border-slate-800 text-slate-600'}`}>
+              <Icon name="edit-3" size={28} />
+              <span className="text-xs font-bold">Manual Editor</span>
+            </button>
+            
+            <button disabled={stats.total === 0 || isProcessing} onClick={runFormatAll} className="bg-blue-600 hover:bg-blue-500 disabled:bg-slate-800 rounded-3xl flex flex-col items-center justify-center gap-2 font-black transition-all shadow-xl shadow-blue-900/30">
+              <Icon name="zap" size={28} className={isProcessing ? 'animate-spin' : ''} />
+              <span className="text-[10px] uppercase tracking-widest">FORMAT SEMUA</span>
+            </button>
+            
+            <button disabled={stats.done === 0} onClick={handleSmartDownload} className="bg-white hover:bg-slate-100 text-slate-950 disabled:bg-slate-800 disabled:text-slate-600 rounded-3xl flex flex-col items-center justify-center gap-2 font-black transition-all shadow-xl shadow-white/5">
+              <Icon name={stats.done > 1 ? "package" : "download"} size={28} />
+              <span className="text-[10px] uppercase tracking-widest">{stats.done > 1 ? "DOWNLOAD ZIP" : "DOWNLOAD FILE"}</span>
+            </button>
+          </div>
+
+          {/* Manual Editor */}
+          {showManual && (
+            <div className="mb-12 p-8 bg-slate-900/80 rounded-[2.5rem] border border-purple-500/30 shadow-2xl animate-in">
+              <div className="flex flex-col sm:flex-row justify-between items-center gap-6 mb-6">
+                <div className="flex bg-slate-950 p-1.5 rounded-2xl border border-slate-800 w-full sm:w-auto">
+                  {['js', 'html', 'css', 'data'].map(t => (
+                    <button key={t} onClick={() => setManualType(t)} className={`flex-1 sm:px-6 py-2 rounded-xl text-[10px] font-black uppercase transition-all ${manualType === t ? 'bg-purple-600 text-white' : 'text-slate-600 hover:text-slate-300'}`}>
+                      {t === 'data' ? 'Txt' : t}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex bg-slate-950 p-1.5 rounded-2xl border border-slate-800">
+                  <button onClick={() => setViewMode('text')} className={`px-6 py-2 rounded-xl text-[10px] font-black transition-all ${viewMode === 'text' ? 'bg-blue-600 text-white' : 'text-slate-600'}`}>TEXT</button>
+                  <button onClick={() => setViewMode('table')} className={`px-6 py-2 rounded-xl text-[10px] font-black transition-all ${viewMode === 'table' ? 'bg-blue-600 text-white' : 'text-slate-600'}`}>TABLE</button>
+                </div>
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <button onClick={() => copyToClipboard(manualText)} className="flex-1 sm:px-6 py-3 bg-slate-800 hover:bg-slate-700 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition-all">
+                    <Icon name="copy" size={14} /> Salin
+                  </button>
+                  <button onClick={handleManualFormat} className="flex-1 sm:px-8 py-3 bg-purple-600 hover:bg-purple-500 rounded-2xl font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-purple-900/40 transition-all">
+                    <Icon name="sparkles" size={14} /> Jalankan
+                  </button>
+                </div>
+              </div>
+              
+              {viewMode === 'text' ? (
+                <textarea 
+                  className="w-full h-96 bg-slate-950 text-emerald-400 font-mono text-sm p-8 rounded-[2rem] border border-slate-800 focus:border-purple-500/50 outline-none resize-none custom-scrollbar shadow-inner"
+                  placeholder="Masukkan kode atau data mentah Anda di sini..."
+                  value={manualText}
+                  onChange={(e) => setManualText(e.target.value)}
+                />
+              ) : (
+                <div className="w-full h-96 bg-slate-950 p-8 rounded-[2rem] border border-slate-800 overflow-auto custom-scrollbar">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="text-[10px] font-black uppercase text-slate-600 border-b border-slate-800">
+                      <tr>{manualText.split('\n')[0]?.split(',').map((h,i) => <th key={i} className="pb-4 px-4 tracking-widest">{h}</th>)}</tr>
+                    </thead>
+                    <tbody className="text-sm">
+                      {manualText.split('\n').slice(1).map((l,i) => (
+                        <tr key={i} className="border-b border-slate-900/30 hover:bg-white/5 transition-colors">
+                          {l.split(',').map((c,j) => <td key={j} className="py-4 px-4 text-slate-400 font-medium">{c}</td>)}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Table Queue */}
+          <div className="bg-slate-900/40 border border-slate-800 rounded-[2.5rem] overflow-hidden shadow-2xl">
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-left">
+                <thead className="bg-slate-950/50 border-b border-slate-800">
+                  <tr>
+                    <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">File Name</th>
+                    <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500">Type</th>
+                    <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Status</th>
+                    <th className="px-6 py-5 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/50">
+                  {files.length === 0 ? (
+                    <tr>
+                      <td colSpan="4" className="py-20 text-center">
+                        <div className="opacity-20 flex flex-col items-center gap-3">
+                          <Icon name="inbox" size={48} />
+                          <p className="font-bold text-sm">Belum ada file dalam daftar</p>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    files.map((f, i) => (
+                      <tr key={i} className="hover:bg-slate-800/30 transition-all group">
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-sm text-slate-200 group-hover:text-blue-400 transition-colors">{f.name}</span>
+                            <span className="text-[10px] font-mono text-slate-500 truncate max-w-[200px]">{f.path}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`text-[9px] font-black px-2 py-0.5 rounded border ${
+                            f.type === 'js' ? 'border-yellow-500/20 text-yellow-500 bg-yellow-500/5' :
+                            f.type === 'html' ? 'border-orange-500/20 text-orange-500 bg-orange-500/5' :
+                            'border-blue-500/20 text-blue-500 bg-blue-500/5'
+                          }`}>
+                            {f.type.toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          {f.status === 'success' ? (
+                            <span className="text-emerald-400 font-bold text-[10px] bg-emerald-400/10 px-3 py-1 rounded-full border border-emerald-400/20 inline-flex items-center gap-1">
+                              <Icon name="check" size={12} /> RAPI
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 font-bold text-[10px] bg-slate-800 px-3 py-1 rounded-full border border-slate-700 inline-flex items-center gap-1">
+                              <Icon name="clock" size={12} /> ANTRE
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex justify-end gap-2">
+                            <button onClick={() => copyToClipboard(f.formatted || f.content)} className="p-2 text-slate-400 hover:text-white transition-colors">
+                              <Icon name="copy" size={16} />
+                            </button>
+                            <button onClick={() => setPreviewFile(f)} className="p-2 text-slate-400 hover:text-blue-400 transition-colors">
+                              <Icon name="eye" size={16} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <footer className="mt-24 pb-12 text-center opacity-30 flex flex-col items-center gap-4">
+            <div className="flex gap-10 grayscale hover:grayscale-0 transition-all duration-700">
+              <Icon name="cpu" size={24}/> <Icon name="zap" size={24}/> <Icon name="shield" size={24}/>
+            </div>
+            <p className="text-[9px] font-black tracking-[0.6em] uppercase text-slate-500">Global Tunneling Nusantara &bull; Architect v7.0 Final</p>
+          </footer>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
 </body>
+
 </html>
